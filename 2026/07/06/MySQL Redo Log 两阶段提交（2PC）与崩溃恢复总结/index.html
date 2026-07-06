@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结 | Hexo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结1. 两阶段提交（2PC）流程两阶段提交确保 Redo Log 和 Binlog 一致，流程如下： 第一阶段：Prepare 事务执行 SQL，修改数据。 Redo Log 记录写入磁盘，但标记为 prepare 状态（数据未真正提交）。 MySQL Server 层通知事务已准备好提交。  第二阶段：Commit Binlog 写入">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结">
+<meta property="og:url" content="https://yafenglou.github.io/2026/07/06/MySQL%20Redo%20Log%20%E4%B8%A4%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4%EF%BC%882PC%EF%BC%89%E4%B8%8E%E5%B4%A9%E6%BA%83%E6%81%A2%E5%A4%8D%E6%80%BB%E7%BB%93/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结1. 两阶段提交（2PC）流程两阶段提交确保 Redo Log 和 Binlog 一致，流程如下： 第一阶段：Prepare 事务执行 SQL，修改数据。 Redo Log 记录写入磁盘，但标记为 prepare 状态（数据未真正提交）。 MySQL Server 层通知事务已准备好提交。  第二阶段：Commit Binlog 写入">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-07-06T04:00:00.000Z">
+<meta property="article:modified_time" content="2026-07-06T08:52:27.638Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="MySQL">
+<meta property="article:tag" content="数据库">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Hexo</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://yafenglou.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/07/06/MySQL%20Redo%20Log%20%E4%B8%A4%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4%EF%BC%882PC%EF%BC%89%E4%B8%8E%E5%B4%A9%E6%BA%83%E6%81%A2%E5%A4%8D%E6%80%BB%E7%BB%93/" class="article-date">
+  <time class="dt-published" datetime="2026-07-06T04:00:00.000Z" itemprop="datePublished">2026-07-06</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%90%8E%E7%AB%AF/">后端</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h1 id="MySQL-Redo-Log-两阶段提交（2PC）与崩溃恢复总结"><a href="#MySQL-Redo-Log-两阶段提交（2PC）与崩溃恢复总结" class="headerlink" title="MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结"></a><strong>MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结</strong></h1><h2 id="1-两阶段提交（2PC）流程"><a href="#1-两阶段提交（2PC）流程" class="headerlink" title="1. 两阶段提交（2PC）流程"></a><strong>1. 两阶段提交（2PC）流程</strong></h2><p>两阶段提交确保 <strong>Redo Log</strong> 和 <strong>Binlog</strong> 一致，流程如下：</p>
+<h3 id="第一阶段：Prepare"><a href="#第一阶段：Prepare" class="headerlink" title="第一阶段：Prepare"></a><strong>第一阶段：Prepare</strong></h3><ol>
+<li>事务执行 SQL，修改数据。</li>
+<li><strong>Redo Log 记录写入磁盘，但标记为 <code>prepare</code> 状态</strong>（数据未真正提交）。</li>
+<li>MySQL Server 层通知事务已准备好提交。</li>
+</ol>
+<h3 id="第二阶段：Commit"><a href="#第二阶段：Commit" class="headerlink" title="第二阶段：Commit"></a><strong>第二阶段：Commit</strong></h3><ol start="4">
+<li><strong>Binlog 写入并刷盘</strong>（保证不会丢失）。</li>
+<li><strong>Redo Log 变更为 <code>commit</code> 状态</strong>。</li>
+<li>事务正式提交，完成。</li>
+</ol>
+<hr>
+<h2 id="2-崩溃发生在不同阶段的影响"><a href="#2-崩溃发生在不同阶段的影响" class="headerlink" title="2. 崩溃发生在不同阶段的影响"></a><strong>2. 崩溃发生在不同阶段的影响</strong></h2><table>
+<thead>
+<tr>
+<th><strong>崩溃时间点</strong></th>
+<th><strong>恢复后事务状态</strong></th>
+<th><strong>是否导致数据丢失</strong></th>
+<th><strong>数据是否一致</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong><code>Prepare</code> 之前</strong></td>
+<td>事务未写入日志，恢复后丢弃</td>
+<td>❌ <strong>不会丢失</strong></td>
+<td>✅ <strong>一致</strong></td>
+</tr>
+<tr>
+<td><strong><code>Prepare</code> 之后，<code>Binlog</code> 之前</strong></td>
+<td>Redo Log <code>prepare</code>，但没有 Binlog，恢复后回滚</td>
+<td>🚨 <strong>可能丢失</strong></td>
+<td>✅ <strong>一致</strong></td>
+</tr>
+<tr>
+<td><strong><code>Binlog</code> 之后，<code>Redo Log Commit</code> 之前</strong></td>
+<td>Binlog 已写入，Redo Log <code>prepare</code>，恢复后事务会<strong>重新提交</strong></td>
+<td>❌ <strong>不会丢失</strong></td>
+<td>✅ <strong>一致</strong></td>
+</tr>
+<tr>
+<td><strong><code>Redo Log Commit</code> 之后</strong></td>
+<td>事务已完整提交，恢复后 MySQL 通过 Redo Log 恢复</td>
+<td>❌ <strong>不会丢失</strong></td>
+<td>✅ <strong>一致</strong></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="3-关键问题分析"><a href="#3-关键问题分析" class="headerlink" title="3. 关键问题分析"></a><strong>3. 关键问题分析</strong></h2><h3 id="（1）Prepare-之后，Binlog-之前崩溃，是否会丢失数据？"><a href="#（1）Prepare-之后，Binlog-之前崩溃，是否会丢失数据？" class="headerlink" title="（1）Prepare 之后，Binlog 之前崩溃，是否会丢失数据？"></a><strong>（1）Prepare 之后，Binlog 之前崩溃，是否会丢失数据？</strong></h3><ul>
+<li><strong>会丢失数据</strong>，因为 Redo Log <code>prepare</code> 但 Binlog 未写入，恢复时 MySQL <strong>必须回滚事务</strong>。</li>
+<li><strong>MySQL 依赖 Binlog 作为事务提交的最终依据</strong>，Binlog 丢失的事务会被撤销。</li>
+</ul>
+<h3 id="（2）这种数据丢失会带来什么影响？"><a href="#（2）这种数据丢失会带来什么影响？" class="headerlink" title="（2）这种数据丢失会带来什么影响？"></a><strong>（2）这种数据丢失会带来什么影响？</strong></h3><ul>
+<li><strong>事务被撤销，数据可能丢失</strong>（应用层可能以为提交成功，但事务实际上被回滚）。</li>
+<li><strong>可能影响外部系统</strong>（如资金扣款、库存修改等，可能导致数据不一致）。</li>
+<li><strong>主从复制仍然保持一致性</strong>（但主库可能丢失事务，影响业务）。</li>
+</ul>
+<hr>
+<h2 id="4-如何防止数据丢失？"><a href="#4-如何防止数据丢失？" class="headerlink" title="4. 如何防止数据丢失？"></a><strong>4. 如何防止数据丢失？</strong></h2><h3 id="✅-方案-1：设置-sync-binlog-1"><a href="#✅-方案-1：设置-sync-binlog-1" class="headerlink" title="✅ 方案 1：设置 sync_binlog = 1"></a><strong>✅ 方案 1：设置 <code>sync_binlog = 1</code></strong></h3><ul>
+<li><strong>确保 Binlog 立即刷盘</strong>，避免 Binlog 丢失导致事务回滚。</li>
+</ul>
+<h3 id="✅-方案-2：设置-innodb-flush-log-at-trx-commit-1"><a href="#✅-方案-2：设置-innodb-flush-log-at-trx-commit-1" class="headerlink" title="✅ 方案 2：设置 innodb_flush_log_at_trx_commit = 1"></a><strong>✅ 方案 2：设置 <code>innodb_flush_log_at_trx_commit = 1</code></strong></h3><ul>
+<li><strong>保证 Redo Log 在事务提交时立即刷盘</strong>，减少丢失风险。</li>
+</ul>
+<h3 id="✅-方案-3：使用-MySQL-8-0-group-replication-或-semi-sync-replication"><a href="#✅-方案-3：使用-MySQL-8-0-group-replication-或-semi-sync-replication" class="headerlink" title="✅ 方案 3：使用 MySQL 8.0 group_replication 或 semi-sync replication"></a><strong>✅ 方案 3：使用 MySQL 8.0 <code>group_replication</code> 或 <code>semi-sync replication</code></strong></h3><ul>
+<li><strong>半同步复制</strong>：保证事务至少写入一个从库的 Binlog 后才确认提交。</li>
+<li><strong>Group Replication</strong>（Paxos&#x2F;Raft）确保事务不会因崩溃丢失。</li>
+</ul>
+<h3 id="✅-方案-4：应用层增加幂等性与事务补偿"><a href="#✅-方案-4：应用层增加幂等性与事务补偿" class="headerlink" title="✅ 方案 4：应用层增加幂等性与事务补偿"></a><strong>✅ 方案 4：应用层增加幂等性与事务补偿</strong></h3><ul>
+<li><strong>幂等性</strong>：确保相同事务多次执行不会影响最终结果（如唯一性检查）。</li>
+<li><strong>事务补偿（TCC&#x2F;SAGA）</strong>：对于涉及外部系统的事务，提供回滚或补偿机制。</li>
+</ul>
+<hr>
+<h2 id="5-结论"><a href="#5-结论" class="headerlink" title="5. 结论"></a><strong>5. 结论</strong></h2><ul>
+<li><strong>两阶段提交保证数据一致性，但可能导致数据丢失</strong>。</li>
+<li><strong>崩溃恢复时，Binlog 丢失的事务会被回滚</strong>，可能影响业务。</li>
+<li><strong>最佳实践是同时开启 <code>sync_binlog=1</code> 和 <code>innodb_flush_log_at_trx_commit=1</code></strong>，配合<strong>半同步复制或 Group Replication</strong> 提高可靠性。</li>
+<li><strong>应用层应设计幂等性和事务补偿机制，避免数据丢失对业务的影响</strong>。</li>
+</ul>
+<p>🚀 <strong>如果业务对一致性要求极高（如金融支付系统），建议采用分布式事务（TCC&#x2F;SAGA）或 NewSQL（如 TiDB）来确保更高的数据安全性！</strong></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://yafenglou.github.io/2026/07/06/MySQL%20Redo%20Log%20%E4%B8%A4%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4%EF%BC%882PC%EF%BC%89%E4%B8%8E%E5%B4%A9%E6%BA%83%E6%81%A2%E5%A4%8D%E6%80%BB%E7%BB%93/" data-id="cuidhBngCKaauQ1XO-J65jKdc" data-title="MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%95%B0%E6%8D%AE%E5%BA%93/" rel="tag">数据库</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/07/06/hello-world/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          Hello World
+        
+      </div>
+    </a>
+  
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%90%8E%E7%AB%AF/">后端</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/MySQL/" rel="tag">MySQL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%95%B0%E6%8D%AE%E5%BA%93/" rel="tag">数据库</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/MySQL/" style="font-size: 10px;">MySQL</a> <a href="/tags/%E6%95%B0%E6%8D%AE%E5%BA%93/" style="font-size: 10px;">数据库</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/07/06/hello-world/">Hello World</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/06/MySQL%20Redo%20Log%20%E4%B8%A4%E9%98%B6%E6%AE%B5%E6%8F%90%E4%BA%A4%EF%BC%882PC%EF%BC%89%E4%B8%8E%E5%B4%A9%E6%BA%83%E6%81%A2%E5%A4%8D%E6%80%BB%E7%BB%93/">MySQL Redo Log 两阶段提交（2PC）与崩溃恢复总结</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 John Doe<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
